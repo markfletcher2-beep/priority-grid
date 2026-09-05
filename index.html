@@ -1,0 +1,1079 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Priority Grid</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #EDEAE2;
+    --panel: #FFFFFF;
+    --ink: #2B2A28;
+    --ink-soft: #6B6A64;
+    --line: #DCD8CC;
+
+    --q-dofirst: #C8452F;
+    --q-dofirst-tint: #F5DAD3;
+    --q-schedule: #256B78;
+    --q-schedule-tint: #D3E6E9;
+    --q-delegate: #B5791E;
+    --q-delegate-tint: #F1E1BE;
+    --q-drop: #6E6A5E;
+    --q-drop-tint: #E6E2D6;
+
+    --danger: #C8452F;
+    --warn: #B5791E;
+  }
+  *{ box-sizing: border-box; }
+  body{
+    margin:0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: 'IBM Plex Sans', sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1,h2,.display{
+    font-family: 'Fraunces', serif;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+  }
+  .wrap{
+    max-width: 880px;
+    margin: 0 auto;
+    padding: 20px 16px 60px;
+  }
+  header{
+    display:flex;
+    align-items:baseline;
+    justify-content:space-between;
+    gap: 12px;
+    margin-bottom: 18px;
+    flex-wrap: wrap;
+  }
+  header h1{ font-size: 26px; margin: 0; }
+  header p{ margin: 4px 0 0; color: var(--ink-soft); font-size: 13.5px; }
+
+  /* Quick add */
+  .add-panel{
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 14px;
+    margin-bottom: 18px;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    grid-template-areas:
+      "name addbtn"
+      "scales scales";
+    column-gap: 8px;
+    row-gap: 12px;
+  }
+  #taskName{
+    grid-area: name;
+    font-size: 16px;
+    padding: 10px 12px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    font-family: inherit;
+    color: var(--ink);
+    background: #FBFAF7;
+  }
+  #taskName:focus{ outline: 2px solid var(--ink); outline-offset: 1px; }
+  .add-btn{
+    grid-area: addbtn;
+    align-self: center;
+    background: var(--ink);
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    padding: 0 20px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .add-btn:disabled{ opacity: 0.4; cursor: not-allowed; }
+  .add-row2{
+    grid-area: scales;
+    display:flex;
+    flex-wrap: wrap;
+    gap: 18px;
+    align-items: flex-end;
+  }
+  .scale-group{ }
+  .scale-label{
+    font-size: 11.5px;
+    text-transform: none;
+    color: var(--ink-soft);
+    margin-bottom: 6px;
+    display:block;
+  }
+  .scale-btns{ display:flex; gap: 4px; }
+  .scale-btn{
+    width: 30px; height: 30px;
+    border-radius: 6px;
+    border: 1px solid var(--line);
+    background: #FBFAF7;
+    color: var(--ink-soft);
+    font-family: inherit;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .scale-btn.active{
+    background: var(--ink);
+    color: #fff;
+    border-color: var(--ink);
+  }
+  .date-group{ display:flex; flex-direction: column; }
+  .date-group input[type=date]{
+    padding: 7px 8px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    font-family: inherit;
+    font-size: 13.5px;
+    background: #FBFAF7;
+    color: var(--ink);
+  }
+  .more-toggle{
+    background: none;
+    border: none;
+    color: var(--ink-soft);
+    font-size: 12.5px;
+    text-decoration: underline;
+    cursor: pointer;
+    padding: 0;
+    font-family: inherit;
+  }
+
+  /* Grid */
+  .grid-section{ margin-bottom: 26px; }
+  .grid-outer{
+    display:flex;
+    gap: 8px;
+  }
+  .axis-y{
+    writing-mode: vertical-rl;
+    transform: rotate(180deg);
+    font-size: 12px;
+    color: var(--ink-soft);
+    text-align: center;
+    padding: 4px 0;
+    flex-shrink: 0;
+  }
+  .grid-col{ flex: 1; min-width: 0; }
+  .grid-square{
+    position: relative;
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    border-radius: 10px;
+    overflow: hidden;
+    border: 1px solid var(--line);
+  }
+  .quad{
+    position: absolute;
+    width: 50%;
+    height: 50%;
+  }
+  .quad-label{
+    position: absolute;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 6px 9px;
+    opacity: 0.85;
+  }
+  .q-tl{ top:0; left:0; background: var(--q-schedule-tint); }
+  .q-tr{ top:0; left:50%; background: var(--q-dofirst-tint); }
+  .q-bl{ top:50%; left:0; background: var(--q-drop-tint); }
+  .q-br{ top:50%; left:50%; background: var(--q-delegate-tint); }
+
+  .midline-v{ position:absolute; left:50%; top:0; bottom:0; width:1px; background: rgba(0,0,0,0.12); }
+  .midline-h{ position:absolute; top:50%; left:0; right:0; height:1px; background: rgba(0,0,0,0.12); }
+
+  .grid-bg{ position:absolute; inset:0; }
+  .cell6{ position:absolute; box-sizing:border-box; border: 1px solid rgba(0,0,0,0.05); }
+
+  .corner-label{
+    position:absolute;
+    font-size: 11.5px;
+    font-weight: 600;
+    padding: 3px 8px;
+    border-radius: 5px;
+    background: rgba(255,255,255,0.62);
+    color: var(--ink);
+    z-index: 2;
+  }
+  .cl-tl{ top:6px; left:6px; }
+  .cl-tr{ top:6px; right:6px; }
+  .cl-bl{ bottom:6px; left:6px; }
+  .cl-br{ bottom:6px; right:6px; }
+
+  .grid-mode-toggle{
+    display:flex;
+    gap: 4px;
+    margin-bottom: 8px;
+    justify-content: flex-end;
+  }
+  .mode-btn{
+    border: 1px solid var(--line);
+    background: #fff;
+    color: var(--ink-soft);
+    font-family: inherit;
+    font-size: 12.5px;
+    padding: 5px 12px;
+    border-radius: 7px;
+    cursor: pointer;
+  }
+  .mode-btn.active{ background: var(--ink); color:#fff; border-color: var(--ink); }
+
+  .pill{
+    position: absolute;
+    transform: translate(-50%, -50%);
+    background: #fff;
+    border: 1.5px solid rgba(0,0,0,0.15);
+    border-radius: 20px;
+    padding: 4px 10px;
+    font-size: 12px;
+    font-weight: 500;
+    white-space: nowrap;
+    max-width: 140px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    cursor: pointer;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+  }
+  .pill.overdue{ border-color: var(--danger); color: var(--danger); }
+  .pill.soon{ border-color: var(--warn); color: var(--warn); }
+
+  .axis-x{
+    text-align:center;
+    font-size: 12px;
+    color: var(--ink-soft);
+    margin-top: 6px;
+  }
+
+  /* List */
+  .list-section h2{ font-size: 16px; margin: 0 0 10px; }
+  .list-controls{
+    display:flex;
+    justify-content: space-between;
+    align-items:center;
+    margin-bottom: 8px;
+  }
+  .list-controls label{ font-size: 13px; color: var(--ink-soft); display:flex; align-items:center; gap:6px; }
+  .task-row{
+    display:flex;
+    align-items:center;
+    gap: 10px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 9px 12px;
+    margin-bottom: 6px;
+    font-size: 13.5px;
+  }
+  .task-row.done{ opacity: 0.5; }
+  .task-row.done .task-name{ text-decoration: line-through; }
+  .row-num{
+    width: 20px;
+    flex-shrink: 0;
+    color: var(--ink-soft);
+    font-size: 12px;
+    text-align: right;
+  }
+  .check{
+    width: 18px; height: 18px;
+    flex-shrink:0;
+    cursor: pointer;
+  }
+  .task-name{ flex:1; min-width: 0; overflow:hidden; text-overflow: ellipsis; white-space:nowrap; cursor:pointer; }
+  .badge{
+    border: none;
+    background: #F0EEE7;
+    color: var(--ink-soft);
+    font-family: inherit;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 4px 8px;
+    border-radius: 6px;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .badge:hover{ background: #E4E1D8; }
+  .inline-editor{
+    display:flex;
+    gap: 3px;
+    background: #F7F5EF;
+    padding: 3px;
+    border-radius: 7px;
+    flex-shrink: 0;
+  }
+  .inline-scale-btn{
+    width: 20px; height: 20px;
+    border-radius: 4px;
+    border: 1px solid var(--line);
+    background: #fff;
+    font-size: 11px;
+    color: var(--ink-soft);
+    cursor: pointer;
+    font-family: inherit;
+    padding: 0;
+  }
+  .inline-scale-btn.active{
+    background: var(--ink);
+    color: #fff;
+    border-color: var(--ink);
+  }
+  .badge.badge-empty{ background: transparent; border: 1px dashed var(--line); color: var(--ink-soft); }
+  .inline-date{
+    display:flex;
+    align-items:center;
+    gap: 6px;
+    background: #F7F5EF;
+    padding: 4px 6px;
+    border-radius: 7px;
+    flex-shrink: 0;
+  }
+  .inline-date input[type=date]{
+    font-family: inherit;
+    font-size: 12px;
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    padding: 3px 5px;
+    background: #fff;
+    color: var(--ink);
+  }
+  .inline-clear{
+    background: none;
+    border: none;
+    color: var(--ink-soft);
+    cursor: pointer;
+    font-size: 12px;
+    padding: 2px;
+    font-family: inherit;
+  }
+  .tag{
+    font-size: 10.5px;
+    font-weight: 600;
+    padding: 2px 6px;
+    border-radius: 5px;
+    flex-shrink:0;
+  }
+  .del-btn{
+    background:none; border:none; color: var(--ink-soft); cursor:pointer; font-size: 15px; padding: 2px 4px; font-family: inherit;
+  }
+  .empty-note{
+    color: var(--ink-soft);
+    font-size: 13.5px;
+    padding: 14px;
+    text-align:center;
+  }
+
+  /* Modal */
+  .modal-backdrop{
+    position: fixed; inset:0;
+    background: rgba(0,0,0,0.35);
+    display:none;
+    align-items:center;
+    justify-content:center;
+    z-index: 50;
+    padding: 16px;
+  }
+  .modal-backdrop.open{ display:flex; }
+  .modal{
+    background:#fff;
+    border-radius: 12px;
+    padding: 20px;
+    width: 100%;
+    max-width: 380px;
+  }
+  .modal h3{ margin: 0 0 14px; font-size: 17px; font-family: 'Fraunces', serif; font-weight:500; }
+  .modal-field{ margin-bottom: 12px; }
+  .modal-field label{ display:block; font-size: 12px; color: var(--ink-soft); margin-bottom: 4px; }
+  .modal-field input[type=text], .modal-field input[type=date]{
+    width:100%;
+    padding: 8px 10px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    font-family: inherit;
+    font-size: 14px;
+  }
+  .modal-actions{ display:flex; justify-content: space-between; margin-top: 16px; }
+  .modal-actions .left{ display:flex; gap:8px; }
+  .btn{
+    border:none; border-radius:7px; padding: 8px 14px; font-size: 13.5px; font-family:inherit; cursor:pointer; font-weight:600;
+  }
+  .btn-primary{ background: var(--ink); color:#fff; }
+  .btn-secondary{ background: #F0EEE7; color: var(--ink); }
+  .btn-danger{ background: none; color: var(--danger); }
+
+  .footer-note{
+    text-align:center;
+    font-size: 11.5px;
+    color: var(--ink-soft);
+    margin-top: 28px;
+  }
+  .footer-note button{
+    background:none; border:none; text-decoration:underline; color: var(--ink-soft); cursor:pointer; font-family:inherit; font-size: 11.5px;
+  }
+
+  @media (max-width: 480px){
+    .add-row2{ gap: 10px; }
+    .scale-btn{ width: 26px; height: 26px; }
+    .add-panel{ grid-template-columns: 1fr; grid-template-areas: "name" "scales" "addbtn"; }
+    .add-btn{ width: 100%; padding: 10px 0; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div>
+      <h1>Priority Grid</h1>
+      <p>Add a task, rate it, done. The grid figures out what matters.</p>
+    </div>
+  </header>
+
+  <div class="add-panel">
+    <input type="text" id="taskName" placeholder="What needs doing?" autocomplete="off">
+    <div class="add-row2">
+      <div class="scale-group">
+        <span class="scale-label">Importance</span>
+        <div class="scale-btns" id="impBtns"></div>
+      </div>
+      <div class="scale-group">
+        <span class="scale-label">Urgency</span>
+        <div class="scale-btns" id="urgBtns"></div>
+      </div>
+      <button class="more-toggle" id="moreToggle">+ due date</button>
+      <div class="date-group" id="dueGroup" style="display:none;">
+        <span class="scale-label">Due date</span>
+        <input type="date" id="dueInput">
+      </div>
+    </div>
+    <button class="add-btn" id="addBtn" disabled>Add</button>
+  </div>
+
+  <div class="grid-section">
+    <div class="grid-mode-toggle">
+      <button class="mode-btn" id="mode2x2" type="button">Classic 2×2</button>
+      <button class="mode-btn" id="mode6x6" type="button">Fine 6×6</button>
+    </div>
+    <div class="grid-outer">
+      <div class="axis-y">Importance →</div>
+      <div class="grid-col">
+        <div class="grid-square" id="gridSquare">
+          <div class="grid-bg" id="gridBg"></div>
+          <div class="corner-label cl-tl">Schedule</div>
+          <div class="corner-label cl-tr">Do first</div>
+          <div class="corner-label cl-bl">Drop</div>
+          <div class="corner-label cl-br">Delegate</div>
+          <!-- pills injected here -->
+        </div>
+        <div class="axis-x">Urgency →</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="list-section">
+    <div class="list-controls">
+      <h2>All tasks</h2>
+      <label><input type="checkbox" id="showCompleted"> Show completed</label>
+    </div>
+    <div id="taskList"></div>
+  </div>
+
+  <div class="footer-note" id="footerNote"></div>
+</div>
+
+<div class="modal-backdrop" id="modalBackdrop">
+  <div class="modal">
+    <h3>Edit task</h3>
+    <div class="modal-field">
+      <label>Name</label>
+      <input type="text" id="editName">
+    </div>
+    <div class="add-row2" style="margin-bottom:12px;">
+      <div class="scale-group">
+        <span class="scale-label">Importance</span>
+        <div class="scale-btns" id="editImpBtns"></div>
+      </div>
+      <div class="scale-group">
+        <span class="scale-label">Urgency</span>
+        <div class="scale-btns" id="editUrgBtns"></div>
+      </div>
+    </div>
+    <div class="modal-field">
+      <label>Start date</label>
+      <input type="date" id="editStart">
+    </div>
+    <div class="modal-field">
+      <label>Due date</label>
+      <input type="date" id="editDue">
+    </div>
+    <div class="modal-actions">
+      <div class="left">
+        <button class="btn btn-danger" id="deleteBtn">Delete</button>
+      </div>
+      <div class="left">
+        <button class="btn btn-secondary" id="cancelBtn">Cancel</button>
+        <button class="btn btn-primary" id="saveBtn">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+window.addEventListener('error', (e) => {
+  const el = document.getElementById('footerNote');
+  if(el) el.innerHTML = 'Something went wrong: ' + (e.message || 'unknown error') + '. Try reloading.';
+}, true);
+
+// Talking to Firebase's plain HTTPS REST API instead of loading its JS
+// library — this environment doesn't allow loading external <script> files,
+// but fetch() to an external URL is fine.
+const DB_URL = 'https://priority-grid-7dbe9-default-rtdb.europe-west1.firebasedatabase.app';
+
+async function fbGet(path){
+  const res = await fetch(DB_URL + '/' + path + '.json');
+  if(!res.ok) throw new Error('GET ' + path + ' failed: ' + res.status);
+  return res.json();
+}
+async function fbSet(path, value){
+  const res = await fetch(DB_URL + '/' + path + '.json', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(value)
+  });
+  if(!res.ok) throw new Error('PUT ' + path + ' failed: ' + res.status);
+  return res.json();
+}
+async function fbUpdate(path, value){
+  const res = await fetch(DB_URL + '/' + path + '.json', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(value)
+  });
+  if(!res.ok) throw new Error('PATCH ' + path + ' failed: ' + res.status);
+  return res.json();
+}
+async function fbDelete(path){
+  const res = await fetch(DB_URL + '/' + path + '.json', { method: 'DELETE' });
+  if(!res.ok) throw new Error('DELETE ' + path + ' failed: ' + res.status);
+  return res.json();
+}
+async function fbPush(path, value){
+  const res = await fetch(DB_URL + '/' + path + '.json', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(value)
+  });
+  if(!res.ok) throw new Error('POST ' + path + ' failed: ' + res.status);
+  const data = await res.json();
+  return data.name;
+}
+
+let tasks = [];
+let settings = { gridMode: '2x2' };
+let inlineEdit = { id: null, field: null }; // field: 'importance' | 'urgency' | 'due'
+let newImportance = null;
+let newUrgency = null;
+let editingId = null;
+let editImportance = null;
+let editUrgency = null;
+let storageOk = true;
+
+const todayISO = () => new Date().toISOString().slice(0,10);
+
+// -- colour math for the 6x6 blend --
+const CORNER_RGB = {
+  TL: [37,107,120],   // Schedule  (teal)
+  TR: [200,69,47],    // Do first  (red)
+  BL: [110,106,94],   // Drop      (grey)
+  BR: [181,121,30]    // Delegate  (amber)
+};
+function lerpRGB(a,b,t){ return [0,1,2].map(i => Math.round(a[i] + (b[i]-a[i])*t)); }
+function mixWhite(rgb, amt){ return rgb.map(v => Math.round(v + (255-v)*amt)); }
+function toCss(rgb){ return `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`; }
+function cellColor(colIdx, rowIdx){
+  const ix = colIdx/5;
+  const iy = rowIdx/5;
+  const bottom = lerpRGB(CORNER_RGB.BL, CORNER_RGB.BR, ix);
+  const top = lerpRGB(CORNER_RGB.TL, CORNER_RGB.TR, ix);
+  const blended = lerpRGB(bottom, top, iy);
+  return toCss(mixWhite(blended, 0.6));
+}
+
+// -- data shape helpers --
+function tasksSnapshotToArray(val){
+  if(!val) return [];
+  return Object.keys(val).map(id => ({ id, ...val[id] }));
+}
+
+// -- one-time migration from the old artifact-storage system --
+async function migrateLegacyTasksIfNeeded(){
+  let existing;
+  try{ existing = await fbGet('tasks'); }catch(e){ storageOk = false; return; }
+  if(existing) return; // Firebase already has data — nothing to migrate
+  let legacy = [];
+  try{
+    const res = await window.storage.get('tasks', true);
+    legacy = res && res.value ? JSON.parse(res.value) : [];
+  }catch(e){ legacy = []; }
+  if(legacy.length === 0) return;
+  const updates = {};
+  let maxSeq = 0;
+  legacy.forEach(t => {
+    const key = 'm' + Date.now().toString(36) + Math.random().toString(36).slice(2,8);
+    const rest = Object.assign({}, t);
+    delete rest.id;
+    updates[key] = rest;
+    if(rest.seq && rest.seq > maxSeq) maxSeq = rest.seq;
+  });
+  try{ await fbSet('tasks', updates); }catch(e){}
+  try{ await fbSet('meta/nextSeq', maxSeq); }catch(e){}
+}
+
+async function migrateLegacySettingsIfNeeded(){
+  let existing;
+  try{ existing = await fbGet('settings'); }catch(e){ return; }
+  if(existing) return;
+  try{
+    const res = await window.storage.get('settings', true);
+    const legacy = res && res.value ? JSON.parse(res.value) : null;
+    if(legacy) await fbSet('settings', legacy);
+  }catch(e){}
+}
+
+// -- polling keeps devices in sync every few seconds; every local action --
+// -- also updates the UI immediately (optimistic) rather than waiting    --
+async function refreshTasksFromServer(){
+  try{
+    const val = await fbGet('tasks');
+    const newTasks = tasksSnapshotToArray(val);
+    const changed = JSON.stringify(newTasks) !== JSON.stringify(tasks);
+    tasks = newTasks;
+    storageOk = true;
+    if(changed && inlineEdit.id === null) renderAll();
+  }catch(e){
+    storageOk = false;
+  }
+  renderFooter();
+}
+
+async function refreshSettingsFromServer(){
+  try{
+    const val = await fbGet('settings');
+    settings = val || { gridMode: '2x2' };
+    refreshModeButtons();
+    renderGrid();
+  }catch(e){ /* keep last known settings */ }
+}
+
+function startPolling(){
+  refreshTasksFromServer();
+  refreshSettingsFromServer();
+  setInterval(refreshTasksFromServer, 4000);
+  setInterval(refreshSettingsFromServer, 8000);
+}
+
+function buildScaleButtons(container, onPick){
+  container.innerHTML = '';
+  for(let i=0;i<=5;i++){
+    const b = document.createElement('button');
+    b.className = 'scale-btn';
+    b.type = 'button';
+    b.textContent = i;
+    b.addEventListener('click', () => onPick(i));
+    container.appendChild(b);
+  }
+}
+
+function refreshScaleButtons(container, activeVal){
+  [...container.children].forEach((b,i) => {
+    b.classList.toggle('active', i === activeVal);
+  });
+}
+
+function renderFooter(){
+  const el = document.getElementById('footerNote');
+  if(!storageOk){
+    el.innerHTML = 'Could not reach the database — check your connection. <button id="resetBtn">Clear all data</button>';
+  }else{
+    el.innerHTML = 'Synced via Firebase (updates every few seconds) · <button id="resetBtn">Clear all data</button>';
+  }
+  document.getElementById('resetBtn').addEventListener('click', async () => {
+    if(confirm('Delete all tasks on every device? This cannot be undone.')){
+      tasks = [];
+      try{ await fbDelete('tasks'); storageOk = true; }catch(e){ storageOk = false; }
+      renderFooter();
+      renderAll();
+    }
+  });
+}
+
+function dueStatus(task){
+  if(task.completed || !task.due) return null;
+  const days = Math.floor((new Date(task.due) - new Date(todayISO())) / 86400000);
+  if(days < 0) return 'overdue';
+  if(days <= 1) return 'soon';
+  return null;
+}
+
+function clampPct(p){ return Math.max(6, Math.min(94, p)); }
+
+function renderGridBg(){
+  const bg = document.getElementById('gridBg');
+  bg.innerHTML = '';
+  if(settings.gridMode === '6x6'){
+    for(let row=0; row<6; row++){
+      const importanceVal = 5 - row;
+      for(let col=0; col<6; col++){
+        const urgencyVal = col;
+        const cell = document.createElement('div');
+        cell.className = 'cell6';
+        cell.style.left = (col/6*100) + '%';
+        cell.style.top = (row/6*100) + '%';
+        cell.style.width = (100/6) + '%';
+        cell.style.height = (100/6) + '%';
+        cell.style.background = cellColor(urgencyVal, importanceVal);
+        bg.appendChild(cell);
+      }
+    }
+  }else{
+    bg.innerHTML = `
+      <div class="quad q-tl"></div>
+      <div class="quad q-tr"></div>
+      <div class="quad q-bl"></div>
+      <div class="quad q-br"></div>
+      <div class="midline-v"></div>
+      <div class="midline-h"></div>
+    `;
+  }
+}
+
+function renderGrid(){
+  renderGridBg();
+  const square = document.getElementById('gridSquare');
+  [...square.querySelectorAll('.pill')].forEach(p => p.remove());
+  const active = tasks.filter(t => !t.completed);
+
+  const groups = {};
+  active.forEach(t => {
+    const key = t.urgency + '-' + t.importance;
+    (groups[key] = groups[key] || []).push(t);
+  });
+
+  active.forEach(t => {
+    let left, top;
+    if(settings.gridMode === '6x6'){
+      left = (t.urgency + 0.5) / 6 * 100;
+      top = 100 - (t.importance + 0.5) / 6 * 100;
+    }else{
+      left = clampPct((t.urgency/5)*100);
+      top = clampPct(100 - (t.importance/5)*100);
+    }
+    const key = t.urgency + '-' + t.importance;
+    const idxInGroup = groups[key].indexOf(t);
+    const stackOffset = idxInGroup * 20;
+
+    const pill = document.createElement('div');
+    const status = dueStatus(t);
+    pill.className = 'pill' + (status === 'overdue' ? ' overdue' : status === 'soon' ? ' soon' : '');
+    pill.style.left = left + '%';
+    pill.style.top = top + '%';
+    pill.style.transform = `translate(-50%, calc(-50% + ${stackOffset}px))`;
+    pill.textContent = t.name;
+    pill.title = t.name + (t.due ? ' · due ' + t.due : '');
+    pill.addEventListener('click', () => openEdit(t.id));
+    square.appendChild(pill);
+  });
+}
+
+function badgeHtml(t, field, label){
+  const val = t[field];
+  if(inlineEdit.id === t.id && inlineEdit.field === field){
+    let btns = '';
+    for(let i=0;i<=5;i++){
+      btns += `<button type="button" class="inline-scale-btn${i===val?' active':''}" onclick="setInlineValue('${t.id}','${field}',${i})">${i}</button>`;
+    }
+    return `<span class="inline-editor">${btns}</span>`;
+  }
+  return `<button type="button" class="badge" onclick="toggleInlineEdit('${t.id}','${field}')">${label}${val}</button>`;
+}
+
+function dueHtml(t){
+  if(inlineEdit.id === t.id && inlineEdit.field === 'due'){
+    return `<span class="inline-editor inline-date">
+      <input type="date" value="${t.due || ''}" onchange="setInlineDue('${t.id}', this.value)">
+      ${t.due ? `<button type="button" class="inline-clear" title="Clear due date" onclick="setInlineDue('${t.id}','')">✕</button>` : ''}
+    </span>`;
+  }
+  const label = t.due ? `due ${t.due}` : '+ due';
+  return `<button type="button" class="badge${t.due ? '' : ' badge-empty'}" onclick="toggleInlineEdit('${t.id}','due')">${label}</button>`;
+}
+
+async function setInlineDue(id, val){
+  inlineEdit = { id: null, field: null };
+  const t = tasks.find(x => x.id === id);
+  if(t) t.due = val || null;
+  try{ await fbUpdate('tasks/' + id, { due: val || null }); storageOk = true; }catch(e){ storageOk = false; }
+  renderFooter();
+  renderAll();
+}
+
+function toggleInlineEdit(id, field){
+  if(inlineEdit.id === id && inlineEdit.field === field){
+    inlineEdit = { id: null, field: null };
+  }else{
+    inlineEdit = { id, field };
+  }
+  renderList();
+  if(inlineEdit.id && inlineEdit.field === 'due'){
+    const input = document.querySelector('.task-row input[type="date"]');
+    if(input){
+      input.focus();
+      if(typeof input.showPicker === 'function'){
+        try{ input.showPicker(); }catch(e){}
+      }
+    }
+  }
+}
+
+async function setInlineValue(id, field, val){
+  inlineEdit = { id: null, field: null };
+  const t = tasks.find(x => x.id === id);
+  if(t) t[field] = val;
+  try{ await fbUpdate('tasks/' + id, { [field]: val }); storageOk = true; }catch(e){ storageOk = false; }
+  renderFooter();
+  renderAll();
+}
+
+function renderList(){
+  const listEl = document.getElementById('taskList');
+  const showCompleted = document.getElementById('showCompleted').checked;
+  let items = tasks.filter(t => showCompleted ? true : !t.completed);
+  items = items.slice().sort((a,b) => {
+    if(!!a.completed !== !!b.completed) return a.completed ? 1 : -1;
+    return a.logged < b.logged ? 1 : -1;
+  });
+  listEl.innerHTML = '';
+  if(items.length === 0){
+    listEl.innerHTML = '<div class="empty-note">Nothing here yet. Add your first task above.</div>';
+    return;
+  }
+  items.forEach((t) => {
+    const row = document.createElement('div');
+    row.className = 'task-row' + (t.completed ? ' done' : '');
+    row.innerHTML = `
+      <span class="row-num">${t.seq}</span>
+      <input type="checkbox" class="check" ${t.completed ? 'checked' : ''}>
+      <span class="task-name">${escapeHtml(t.name)}</span>
+      ${badgeHtml(t, 'importance', 'I')}
+      ${badgeHtml(t, 'urgency', 'U')}
+      ${dueHtml(t)}
+      <button class="del-btn" title="Delete">✕</button>
+    `;
+    row.querySelector('.check').addEventListener('change', async (e) => {
+      const val = e.target.checked ? todayISO() : null;
+      t.completed = val;
+      try{ await fbUpdate('tasks/' + t.id, { completed: val }); storageOk = true; }catch(err){ storageOk = false; }
+      renderFooter();
+      renderAll();
+    });
+    row.querySelector('.task-name').addEventListener('click', () => openEdit(t.id));
+    row.querySelector('.del-btn').addEventListener('click', async () => {
+      tasks = tasks.filter(x => x.id !== t.id);
+      try{ await fbDelete('tasks/' + t.id); storageOk = true; }catch(e){ storageOk = false; }
+      renderFooter();
+      renderAll();
+    });
+    listEl.appendChild(row);
+  });
+}
+
+function escapeHtml(str){
+  const d = document.createElement('div');
+  d.textContent = str;
+  return d.innerHTML;
+}
+
+function renderAll(){
+  renderGrid();
+  renderList();
+}
+
+function openEdit(id){
+  const t = tasks.find(x => x.id === id);
+  if(!t) return;
+  editingId = id;
+  editImportance = t.importance;
+  editUrgency = t.urgency;
+  document.getElementById('editName').value = t.name;
+  document.getElementById('editStart').value = t.start || '';
+  document.getElementById('editDue').value = t.due || '';
+  refreshScaleButtons(document.getElementById('editImpBtns'), editImportance);
+  refreshScaleButtons(document.getElementById('editUrgBtns'), editUrgency);
+  document.getElementById('modalBackdrop').classList.add('open');
+}
+
+function closeEdit(){
+  document.getElementById('modalBackdrop').classList.remove('open');
+  editingId = null;
+}
+
+function checkAddEnabled(){
+  const name = document.getElementById('taskName').value.trim();
+  document.getElementById('addBtn').disabled = !(name && newImportance !== null && newUrgency !== null);
+}
+
+function refreshModeButtons(){
+  document.getElementById('mode2x2').classList.toggle('active', settings.gridMode === '2x2');
+  document.getElementById('mode6x6').classList.toggle('active', settings.gridMode === '6x6');
+}
+
+async function addTask(){
+  const name = document.getElementById('taskName').value.trim();
+  if(!name || newImportance === null || newUrgency === null) return;
+  const due = document.getElementById('dueInput').value || null;
+
+  let seqVal;
+  try{
+    const current = await fbGet('meta/nextSeq');
+    seqVal = (current || 0) + 1;
+    await fbSet('meta/nextSeq', seqVal);
+  }catch(e){
+    seqVal = Date.now(); // fallback — shouldn't normally happen
+  }
+
+  const newTask = {
+    seq: seqVal,
+    name,
+    importance: newImportance,
+    urgency: newUrgency,
+    logged: todayISO(),
+    start: todayISO(),
+    due,
+    completed: null
+  };
+
+  let key = null;
+  try{
+    key = await fbPush('tasks', newTask);
+    storageOk = true;
+  }catch(e){
+    storageOk = false;
+  }
+  renderFooter();
+
+  if(key){
+    tasks.push(Object.assign({ id: key }, newTask));
+    renderAll();
+  }
+
+  document.getElementById('taskName').value = '';
+  newImportance = null;
+  newUrgency = null;
+  refreshScaleButtons(document.getElementById('impBtns'), -1);
+  refreshScaleButtons(document.getElementById('urgBtns'), -1);
+  document.getElementById('dueInput').value = '';
+  document.getElementById('dueGroup').style.display = 'none';
+  checkAddEnabled();
+  document.getElementById('taskName').focus();
+}
+
+async function init(){
+  await migrateLegacyTasksIfNeeded();
+  await migrateLegacySettingsIfNeeded();
+  startPolling();
+  refreshModeButtons();
+
+  document.getElementById('mode2x2').addEventListener('click', async () => {
+    settings.gridMode = '2x2';
+    refreshModeButtons();
+    try{ await fbSet('settings', settings); storageOk = true; }catch(e){ storageOk = false; }
+    renderFooter();
+    renderGrid();
+  });
+  document.getElementById('mode6x6').addEventListener('click', async () => {
+    settings.gridMode = '6x6';
+    refreshModeButtons();
+    try{ await fbSet('settings', settings); storageOk = true; }catch(e){ storageOk = false; }
+    renderFooter();
+    renderGrid();
+  });
+
+  document.querySelector('.add-panel').addEventListener('keydown', (e) => {
+    if(e.key === 'Enter' && !document.getElementById('addBtn').disabled){
+      e.preventDefault();
+      addTask();
+    }
+  });
+
+  buildScaleButtons(document.getElementById('impBtns'), (v) => {
+    newImportance = v;
+    refreshScaleButtons(document.getElementById('impBtns'), v);
+    checkAddEnabled();
+  });
+  buildScaleButtons(document.getElementById('urgBtns'), (v) => {
+    newUrgency = v;
+    refreshScaleButtons(document.getElementById('urgBtns'), v);
+    checkAddEnabled();
+  });
+  buildScaleButtons(document.getElementById('editImpBtns'), (v) => {
+    editImportance = v;
+    refreshScaleButtons(document.getElementById('editImpBtns'), v);
+  });
+  buildScaleButtons(document.getElementById('editUrgBtns'), (v) => {
+    editUrgency = v;
+    refreshScaleButtons(document.getElementById('editUrgBtns'), v);
+  });
+
+  document.getElementById('taskName').addEventListener('input', checkAddEnabled);
+  document.getElementById('addBtn').addEventListener('click', addTask);
+
+  document.getElementById('moreToggle').addEventListener('click', () => {
+    const g = document.getElementById('dueGroup');
+    g.style.display = g.style.display === 'none' ? 'flex' : 'none';
+  });
+
+  document.getElementById('showCompleted').addEventListener('change', renderList);
+
+  document.getElementById('cancelBtn').addEventListener('click', closeEdit);
+  document.getElementById('modalBackdrop').addEventListener('click', (e) => {
+    if(e.target.id === 'modalBackdrop') closeEdit();
+  });
+  document.getElementById('saveBtn').addEventListener('click', async () => {
+    if(!editingId) return;
+    const updatesObj = {
+      name: document.getElementById('editName').value.trim(),
+      importance: editImportance,
+      urgency: editUrgency,
+      start: document.getElementById('editStart').value,
+      due: document.getElementById('editDue').value || null
+    };
+    const t = tasks.find(x => x.id === editingId);
+    if(t) Object.assign(t, updatesObj);
+    try{ await fbUpdate('tasks/' + editingId, updatesObj); storageOk = true; }catch(e){ storageOk = false; }
+    renderFooter();
+    closeEdit();
+    renderAll();
+  });
+  document.getElementById('deleteBtn').addEventListener('click', async () => {
+    if(!editingId) return;
+    tasks = tasks.filter(x => x.id !== editingId);
+    try{ await fbDelete('tasks/' + editingId); storageOk = true; }catch(e){ storageOk = false; }
+    renderFooter();
+    closeEdit();
+    renderAll();
+  });
+
+  renderFooter();
+}
+
+init();
+</script>
+</body>
+</html>
