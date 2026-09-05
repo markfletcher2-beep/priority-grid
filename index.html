@@ -15,13 +15,13 @@
     --line: #DCD8CC;
 
     --q-dofirst: #C8452F;
-    --q-dofirst-tint: #F5DAD3;
+    --q-dofirst-tint: #E6ABA1;
     --q-schedule: #256B78;
-    --q-schedule-tint: #D3E6E9;
+    --q-schedule-tint: #9DBCC2;
     --q-delegate: #B5791E;
-    --q-delegate-tint: #F1E1BE;
+    --q-delegate-tint: #DEC39A;
     --q-drop: #6E6A5E;
-    --q-drop-tint: #E6E2D6;
+    --q-drop-tint: #BEBCB7;
 
     --danger: #C8452F;
     --warn: #B5791E;
@@ -263,6 +263,16 @@
     margin-bottom: 8px;
   }
   .list-controls label{ font-size: 13px; color: var(--ink-soft); display:flex; align-items:center; gap:6px; }
+  .list-controls-right{ display:flex; align-items:center; gap:14px; flex-wrap:wrap; }
+  #sortBySelect{
+    font-family: inherit;
+    font-size: 12.5px;
+    color: var(--ink-soft);
+    background: #FBFAF7;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 5px 8px;
+  }
   .task-row{
     display:flex;
     align-items:center;
@@ -483,7 +493,15 @@
   <div class="list-section">
     <div class="list-controls">
       <h2>All tasks</h2>
-      <label><input type="checkbox" id="showCompleted"> Show completed</label>
+      <div class="list-controls-right">
+        <select id="sortBySelect">
+          <option value="logged">Sort: Date logged</option>
+          <option value="due">Sort: Due date</option>
+          <option value="importance">Sort: Importance</option>
+          <option value="urgency">Sort: Urgency</option>
+        </select>
+        <label><input type="checkbox" id="showCompleted"> Show completed</label>
+      </div>
     </div>
     <div id="taskList"></div>
   </div>
@@ -579,7 +597,7 @@ async function fbPush(path, value){
 }
 
 let tasks = [];
-let settings = { gridMode: '2x2' };
+let settings = { gridMode: '2x2', sortBy: 'logged' };
 let inlineEdit = { id: null, field: null }; // field: 'importance' | 'urgency' | 'due'
 let newImportance = null;
 let newUrgency = null;
@@ -666,8 +684,10 @@ async function refreshTasksFromServer(){
 async function refreshSettingsFromServer(){
   try{
     const val = await fbGet('settings');
-    settings = val || { gridMode: '2x2' };
+    settings = val || { gridMode: '2x2', sortBy: 'logged' };
+    if(!settings.sortBy) settings.sortBy = 'logged'; // older saved settings predate this field
     refreshModeButtons();
+    refreshSortSelect();
     renderGrid();
   }catch(e){ /* keep last known settings */ }
 }
@@ -854,8 +874,26 @@ function renderList(){
   const showCompleted = document.getElementById('showCompleted').checked;
   let items = tasks.filter(t => showCompleted ? true : !t.completed);
   items = items.slice().sort((a,b) => {
-    if(!!a.completed !== !!b.completed) return a.completed ? 1 : -1;
-    return a.logged < b.logged ? 1 : -1;
+    if(!!a.completed !== !!b.completed) return a.completed ? 1 : -1; // completed always sinks to the bottom
+
+    switch(settings.sortBy){
+      case 'importance':
+        if(b.importance !== a.importance) return b.importance - a.importance; // highest first
+        break;
+      case 'urgency':
+        if(b.urgency !== a.urgency) return b.urgency - a.urgency; // highest first
+        break;
+      case 'due': {
+        // tasks with no due date sort to the end; soonest due date first
+        if(!a.due && !b.due) break;
+        if(!a.due) return 1;
+        if(!b.due) return -1;
+        if(a.due !== b.due) return a.due < b.due ? -1 : 1;
+        break;
+      }
+      // 'logged' (default) falls straight through to the tiebreaker below
+    }
+    return a.logged < b.logged ? 1 : -1; // tiebreaker / default: most recently logged first
   });
   listEl.innerHTML = '';
   if(items.length === 0){
@@ -932,6 +970,11 @@ function refreshModeButtons(){
   document.getElementById('mode6x6').classList.toggle('active', settings.gridMode === '6x6');
 }
 
+function refreshSortSelect(){
+  const el = document.getElementById('sortBySelect');
+  if(el) el.value = settings.sortBy || 'logged';
+}
+
 async function addTask(){
   const name = document.getElementById('taskName').value.trim();
   if(!name || newImportance === null || newUrgency === null) return;
@@ -987,6 +1030,14 @@ async function init(){
   await migrateLegacySettingsIfNeeded();
   startPolling();
   refreshModeButtons();
+  refreshSortSelect();
+
+  document.getElementById('sortBySelect').addEventListener('change', async (e) => {
+    settings.sortBy = e.target.value;
+    renderList();
+    try{ await fbSet('settings', settings); storageOk = true; }catch(err){ storageOk = false; }
+    renderFooter();
+  });
 
   document.getElementById('mode2x2').addEventListener('click', async () => {
     settings.gridMode = '2x2';
