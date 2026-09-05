@@ -188,8 +188,8 @@
   .q-bl{ top:50%; left:0; background: var(--q-drop-tint); }
   .q-br{ top:50%; left:50%; background: var(--q-delegate-tint); }
 
-  .midline-v{ position:absolute; left:50%; top:0; bottom:0; width:1px; background: rgba(0,0,0,0.12); }
-  .midline-h{ position:absolute; top:50%; left:0; right:0; height:1px; background: rgba(0,0,0,0.12); }
+  .grid-boundary-v{ position:absolute; left:50%; top:0; bottom:0; width:2px; background: rgba(43,42,40,0.4); transform: translateX(-1px); pointer-events:none; z-index:1; }
+  .grid-boundary-h{ position:absolute; top:50%; left:0; right:0; height:2px; background: rgba(43,42,40,0.4); transform: translateY(-1px); pointer-events:none; z-index:1; }
 
   .grid-bg{ position:absolute; inset:0; }
   .cell6{ position:absolute; box-sizing:border-box; border: 1px solid rgba(0,0,0,0.05); }
@@ -229,6 +229,7 @@
 
   .pill{
     position: absolute;
+    z-index: 2;
     transform: translate(-50%, -50%);
     background: #fff;
     border: 1.5px solid rgba(0,0,0,0.15);
@@ -466,6 +467,8 @@
       <div class="grid-col">
         <div class="grid-square" id="gridSquare">
           <div class="grid-bg" id="gridBg"></div>
+          <div class="grid-boundary-v"></div>
+          <div class="grid-boundary-h"></div>
           <div class="corner-label cl-tl">Schedule</div>
           <div class="corner-label cl-tr">Do first</div>
           <div class="corner-label cl-bl">Drop</div>
@@ -587,23 +590,20 @@ let storageOk = true;
 
 const todayISO = () => new Date().toISOString().slice(0,10);
 
-// -- colour math for the 6x6 blend --
-const CORNER_RGB = {
-  TL: [37,107,120],   // Schedule  (teal)
-  TR: [200,69,47],    // Do first  (red)
-  BL: [110,106,94],   // Drop      (grey)
-  BR: [181,121,30]    // Delegate  (amber)
-};
-function lerpRGB(a,b,t){ return [0,1,2].map(i => Math.round(a[i] + (b[i]-a[i])*t)); }
-function mixWhite(rgb, amt){ return rgb.map(v => Math.round(v + (255-v)*amt)); }
-function toCss(rgb){ return `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`; }
-function cellColor(colIdx, rowIdx){
-  const ix = colIdx/5;
-  const iy = rowIdx/5;
-  const bottom = lerpRGB(CORNER_RGB.BL, CORNER_RGB.BR, ix);
-  const top = lerpRGB(CORNER_RGB.TL, CORNER_RGB.TR, ix);
-  const blended = lerpRGB(bottom, top, iy);
-  return toCss(mixWhite(blended, 0.6));
+// -- colour math for the 6x6 shading --
+// Hue runs cool (teal, calm) to hot (red, urgent) as urgency increases.
+// Importance controls how muted vs vivid the cell looks — low importance
+// stays pale and grey-ish, high importance becomes saturated and deeper.
+// Keeping hue on a single axis (rather than blending four separate colours)
+// avoids the muddy brownish-grey that shows up when very different hues
+// get averaged together in the middle of the grid.
+function cellColor(urgencyVal, importanceVal){
+  const u = urgencyVal / 5;
+  const im = importanceVal / 5;
+  const hue = 185 + (9 - 185) * u;      // 185° teal → 9° red
+  const sat = 15 + (70 - 15) * im;      // 15% (muted) → 70% (vivid)
+  const light = 88 + (68 - 88) * im;    // 88% (pale) → 68% (deeper)
+  return `hsl(${hue.toFixed(1)}, ${sat.toFixed(0)}%, ${light.toFixed(0)}%)`;
 }
 
 // -- data shape helpers --
@@ -748,8 +748,6 @@ function renderGridBg(){
       <div class="quad q-tr"></div>
       <div class="quad q-bl"></div>
       <div class="quad q-br"></div>
-      <div class="midline-v"></div>
-      <div class="midline-h"></div>
     `;
   }
 }
