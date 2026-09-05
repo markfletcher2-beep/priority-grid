@@ -500,6 +500,7 @@
           <option value="importance">Sort: Importance</option>
           <option value="urgency">Sort: Urgency</option>
         </select>
+        <label><input type="checkbox" id="dueSoonOnly"> Due within 7 days</label>
         <label><input type="checkbox" id="showCompleted"> Show completed</label>
       </div>
     </div>
@@ -872,7 +873,15 @@ async function setInlineValue(id, field, val){
 function renderList(){
   const listEl = document.getElementById('taskList');
   const showCompleted = document.getElementById('showCompleted').checked;
+  const dueSoonOnly = document.getElementById('dueSoonOnly').checked;
   let items = tasks.filter(t => showCompleted ? true : !t.completed);
+  if(dueSoonOnly){
+    items = items.filter(t => {
+      if(!t.due) return false;
+      const daysUntilDue = Math.floor((new Date(t.due) - new Date(todayISO())) / 86400000);
+      return daysUntilDue <= 7; // includes anything already overdue too
+    });
+  }
   items = items.slice().sort((a,b) => {
     if(!!a.completed !== !!b.completed) return a.completed ? 1 : -1; // completed always sinks to the bottom
 
@@ -1089,6 +1098,7 @@ async function init(){
   });
 
   document.getElementById('showCompleted').addEventListener('change', renderList);
+  document.getElementById('dueSoonOnly').addEventListener('change', renderList);
 
   document.getElementById('cancelBtn').addEventListener('click', closeEdit);
   document.getElementById('modalBackdrop').addEventListener('click', (e) => {
