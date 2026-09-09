@@ -777,7 +777,15 @@ function renderGrid(){
   renderGridBg();
   const square = document.getElementById('gridSquare');
   [...square.querySelectorAll('.pill')].forEach(p => p.remove());
-  const active = tasks.filter(t => !t.completed);
+  const dueSoonOnly = document.getElementById('dueSoonOnly').checked;
+  let active = tasks.filter(t => !t.completed);
+  if(dueSoonOnly){
+    active = active.filter(t => {
+      if(!t.due) return false;
+      const daysUntilDue = Math.floor((new Date(t.due) - new Date(todayISO())) / 86400000);
+      return daysUntilDue <= 7; // includes anything already overdue too — matches the list filter
+    });
+  }
 
   const groups = {};
   active.forEach(t => {
@@ -1098,7 +1106,7 @@ async function init(){
   });
 
   document.getElementById('showCompleted').addEventListener('change', renderList);
-  document.getElementById('dueSoonOnly').addEventListener('change', renderList);
+  document.getElementById('dueSoonOnly').addEventListener('change', renderAll);
 
   document.getElementById('cancelBtn').addEventListener('click', closeEdit);
   document.getElementById('modalBackdrop').addEventListener('click', (e) => {
