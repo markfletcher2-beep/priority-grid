@@ -410,6 +410,26 @@
     font-family: inherit;
     font-size: 14px;
   }
+  .modal-field textarea{
+    width:100%;
+    padding: 8px 10px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    font-family: inherit;
+    font-size: 14px;
+    resize: vertical;
+    min-height: 60px;
+    box-sizing: border-box;
+  }
+  .notes-dot{
+    display:inline-block;
+    width:6px; height:6px;
+    border-radius:50%;
+    background: var(--ink-soft);
+    margin-left:6px;
+    flex-shrink:0;
+    opacity:0.6;
+  }
   .modal-actions{ display:flex; justify-content: space-between; margin-top: 16px; }
   .modal-actions .left{ display:flex; gap:8px; }
   .btn{
@@ -534,6 +554,10 @@
     <div class="modal-field">
       <label>Due date</label>
       <input type="date" id="editDue">
+    </div>
+    <div class="modal-field">
+      <label>Notes</label>
+      <textarea id="editNotes" placeholder="Add any extra detail here..."></textarea>
     </div>
     <div class="modal-actions">
       <div class="left">
@@ -924,6 +948,7 @@ function renderList(){
       <span class="row-num">${t.seq}</span>
       <input type="checkbox" class="check" ${t.completed ? 'checked' : ''}>
       <span class="task-name">${escapeHtml(t.name)}</span>
+      ${t.notes ? '<span class="notes-dot" title="Has notes"></span>' : ''}
       ${badgeHtml(t, 'importance', 'I')}
       ${badgeHtml(t, 'urgency', 'U')}
       ${dueHtml(t)}
@@ -967,6 +992,7 @@ function openEdit(id){
   document.getElementById('editName').value = t.name;
   document.getElementById('editStart').value = t.start || '';
   document.getElementById('editDue').value = t.due || '';
+  document.getElementById('editNotes').value = t.notes || '';
   refreshScaleButtons(document.getElementById('editImpBtns'), editImportance);
   refreshScaleButtons(document.getElementById('editUrgBtns'), editUrgency);
   document.getElementById('modalBackdrop').classList.add('open');
@@ -1119,7 +1145,8 @@ async function init(){
       importance: editImportance,
       urgency: editUrgency,
       start: document.getElementById('editStart').value,
-      due: document.getElementById('editDue').value || null
+      due: document.getElementById('editDue').value || null,
+      notes: document.getElementById('editNotes').value.trim() || null
     };
     const t = tasks.find(x => x.id === editingId);
     if(t) Object.assign(t, updatesObj);
