@@ -194,6 +194,33 @@
   .grid-bg{ position:absolute; inset:0; }
   .cell6{ position:absolute; box-sizing:border-box; border: 1px solid rgba(0,0,0,0.05); }
 
+  .quad, .cell6{ cursor: pointer; transition: opacity 0.15s ease, box-shadow 0.15s ease; }
+  .quad.cell-dim, .cell6.cell-dim{ opacity: 0.4; }
+  .quad.cell-active, .cell6.cell-active{ box-shadow: inset 0 0 0 2px var(--ink); opacity: 1; z-index: 2; }
+
+  .cell-filter-banner{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:8px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 8px 12px;
+    margin-bottom: 8px;
+    font-size: 13px;
+  }
+  .cell-filter-banner button{
+    border:none;
+    background: var(--ink);
+    color: #fff;
+    padding: 5px 10px;
+    border-radius: 6px;
+    font-size: 12.5px;
+    cursor: pointer;
+    font-family: inherit;
+  }
+
   .corner-label{
     position:absolute;
     font-size: 11.5px;
@@ -203,6 +230,7 @@
     background: rgba(255,255,255,0.62);
     color: var(--ink);
     z-index: 2;
+    pointer-events: none;
   }
   .cl-tl{ top:6px; left:6px; }
   .cl-tr{ top:6px; right:6px; }
@@ -524,6 +552,10 @@
         <label><input type="checkbox" id="showCompleted"> Show completed</label>
       </div>
     </div>
+    <div class="cell-filter-banner" id="cellFilterBanner" style="display:none;">
+      <span id="cellFilterLabel"></span>
+      <button type="button" id="cellFilterClear">Show all</button>
+    </div>
     <div id="taskList"></div>
   </div>
 
@@ -627,6 +659,7 @@ let inlineEdit = { id: null, field: null }; // field: 'importance' | 'urgency' |
 let newImportance = null;
 let newUrgency = null;
 let editingId = null;
+let cellFilter = null; // { mode:'2x2', quad:'tl'|'tr'|'bl'|'br' } or { mode:'6x6', urgency:0-5, importance:0-5 }
 let editImportance = null;
 let editUrgency = null;
 let storageOk = true;
@@ -784,17 +817,67 @@ function renderGridBg(){
         cell.style.width = (100/6) + '%';
         cell.style.height = (100/6) + '%';
         cell.style.background = cellColor(urgencyVal, importanceVal);
+        const isActive = cellFilter && cellFilter.mode === '6x6' && cellFilter.urgency === urgencyVal && cellFilter.importance === importanceVal;
+        if(isActive) cell.classList.add('cell-active');
+        else if(cellFilter) cell.classList.add('cell-dim');
+        cell.addEventListener('click', () => toggleCellFilter({ mode:'6x6', urgency: urgencyVal, importance: importanceVal }));
         bg.appendChild(cell);
       }
     }
   }else{
     bg.innerHTML = `
-      <div class="quad q-tl"></div>
-      <div class="quad q-tr"></div>
-      <div class="quad q-bl"></div>
-      <div class="quad q-br"></div>
+      <div class="quad q-tl" data-quad="tl"></div>
+      <div class="quad q-tr" data-quad="tr"></div>
+      <div class="quad q-bl" data-quad="bl"></div>
+      <div class="quad q-br" data-quad="br"></div>
     `;
+    [...bg.querySelectorAll('.quad')].forEach(q => {
+      const quad = q.dataset.quad;
+      const isActive = cellFilter && cellFilter.mode === '2x2' && cellFilter.quad === quad;
+      if(isActive) q.classList.add('cell-active');
+      else if(cellFilter) q.classList.add('cell-dim');
+      q.addEventListener('click', () => toggleCellFilter({ mode:'2x2', quad }));
+    });
   }
+}
+
+const QUAD_NAMES = { tl:'Schedule', tr:'Do first', bl:'Drop', br:'Delegate' };
+
+function toggleCellFilter(sel){
+  const isSame = cellFilter && cellFilter.mode === sel.mode &&
+    (sel.mode === '2x2' ? cellFilter.quad === sel.quad
+      : cellFilter.urgency === sel.urgency && cellFilter.importance === sel.importance);
+  cellFilter = isSame ? null : sel;
+  renderAll();
+}
+
+function clearCellFilter(){
+  cellFilter = null;
+  renderAll();
+}
+
+function taskMatchesCellFilter(t){
+  if(!cellFilter) return true;
+  if(cellFilter.mode === '6x6'){
+    return t.urgency === cellFilter.urgency && t.importance === cellFilter.importance;
+  }
+  const rightHalf = t.urgency >= 3;
+  const topHalf = t.importance >= 3;
+  const quad = (topHalf ? 't' : 'b') + (rightHalf ? 'r' : 'l');
+  return quad === cellFilter.quad;
+}
+
+function renderCellFilterBanner(){
+  const banner = document.getElementById('cellFilterBanner');
+  if(!cellFilter){
+    banner.style.display = 'none';
+    return;
+  }
+  banner.style.display = 'flex';
+  const label = cellFilter.mode === '2x2'
+    ? `Showing "${QUAD_NAMES[cellFilter.quad]}" quadrant only`
+    : `Showing cell U${cellFilter.urgency} / I${cellFilter.importance} only`;
+  document.getElementById('cellFilterLabel').textContent = label;
 }
 
 function renderGrid(){
@@ -904,9 +987,11 @@ async function setInlineValue(id, field, val){
 
 function renderList(){
   const listEl = document.getElementById('taskList');
+  renderCellFilterBanner();
   const showCompleted = document.getElementById('showCompleted').checked;
   const dueSoonOnly = document.getElementById('dueSoonOnly').checked;
   let items = tasks.filter(t => showCompleted ? true : !t.completed);
+  items = items.filter(taskMatchesCellFilter);
   if(dueSoonOnly){
     items = items.filter(t => {
       if(!t.due) return false;
@@ -938,7 +1023,9 @@ function renderList(){
   });
   listEl.innerHTML = '';
   if(items.length === 0){
-    listEl.innerHTML = '<div class="empty-note">Nothing here yet. Add your first task above.</div>';
+    listEl.innerHTML = cellFilter
+      ? '<div class="empty-note">No tasks in this cell.</div>'
+      : '<div class="empty-note">Nothing here yet. Add your first task above.</div>';
     return;
   }
   items.forEach((t) => {
@@ -1084,17 +1171,19 @@ async function init(){
 
   document.getElementById('mode2x2').addEventListener('click', async () => {
     settings.gridMode = '2x2';
+    cellFilter = null;
     refreshModeButtons();
     try{ await fbSet('settings', settings); storageOk = true; }catch(e){ storageOk = false; }
     renderFooter();
-    renderGrid();
+    renderAll();
   });
   document.getElementById('mode6x6').addEventListener('click', async () => {
     settings.gridMode = '6x6';
+    cellFilter = null;
     refreshModeButtons();
     try{ await fbSet('settings', settings); storageOk = true; }catch(e){ storageOk = false; }
     renderFooter();
-    renderGrid();
+    renderAll();
   });
 
   document.querySelector('.add-panel').addEventListener('keydown', (e) => {
@@ -1133,6 +1222,7 @@ async function init(){
 
   document.getElementById('showCompleted').addEventListener('change', renderList);
   document.getElementById('dueSoonOnly').addEventListener('change', renderAll);
+  document.getElementById('cellFilterClear').addEventListener('click', clearCellFilter);
 
   document.getElementById('cancelBtn').addEventListener('click', closeEdit);
   document.getElementById('modalBackdrop').addEventListener('click', (e) => {
