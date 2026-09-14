@@ -604,54 +604,47 @@
   </div>
 </div>
 
+<script src="https://www.gstatic.com/firebasejs/12.18.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/12.18.0/firebase-database-compat.js"></script>
 <script>
 window.addEventListener('error', (e) => {
   const el = document.getElementById('footerNote');
   if(el) el.innerHTML = 'Something went wrong: ' + (e.message || 'unknown error') + '. Try reloading.';
 }, true);
 
-// Talking to Firebase's plain HTTPS REST API instead of loading its JS
-// library — this environment doesn't allow loading external <script> files,
-// but fetch() to an external URL is fine.
-const DB_URL = 'https://priority-grid-7dbe9-default-rtdb.europe-west1.firebasedatabase.app';
+// Real Firebase JS SDK — replaces the old plain-fetch REST approach now that
+// this runs as a normal hosted site (no sandbox blocking external scripts).
+// Gives instant push-based sync instead of polling, and atomic transactions
+// for things like the sequence counter.
+const firebaseConfig = {
+  apiKey: "AIzaSyDAwc5U4C_BIgO1ePrupdv_XSp15YGaA74",
+  authDomain: "priority-grid-7dbe9.firebaseapp.com",
+  databaseURL: "https://priority-grid-7dbe9-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "priority-grid-7dbe9",
+  storageBucket: "priority-grid-7dbe9.firebasestorage.app",
+  messagingSenderId: "397721421921",
+  appId: "1:397721421921:web:63693f07c1db3da9e74220"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
 
-async function fbGet(path){
-  const res = await fetch(DB_URL + '/' + path + '.json');
-  if(!res.ok) throw new Error('GET ' + path + ' failed: ' + res.status);
-  return res.json();
+// Thin wrappers so the rest of the app's code (which was written against
+// these five function names) doesn't need to change at all.
+function fbGet(path){
+  return db.ref(path).once('value').then(snap => snap.val());
 }
-async function fbSet(path, value){
-  const res = await fetch(DB_URL + '/' + path + '.json', {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(value)
-  });
-  if(!res.ok) throw new Error('PUT ' + path + ' failed: ' + res.status);
-  return res.json();
+function fbSet(path, value){
+  return db.ref(path).set(value);
 }
-async function fbUpdate(path, value){
-  const res = await fetch(DB_URL + '/' + path + '.json', {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(value)
-  });
-  if(!res.ok) throw new Error('PATCH ' + path + ' failed: ' + res.status);
-  return res.json();
+function fbUpdate(path, value){
+  return db.ref(path).update(value);
 }
-async function fbDelete(path){
-  const res = await fetch(DB_URL + '/' + path + '.json', { method: 'DELETE' });
-  if(!res.ok) throw new Error('DELETE ' + path + ' failed: ' + res.status);
-  return res.json();
+function fbDelete(path){
+  return db.ref(path).remove();
 }
-async function fbPush(path, value){
-  const res = await fetch(DB_URL + '/' + path + '.json', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(value)
-  });
-  if(!res.ok) throw new Error('POST ' + path + ' failed: ' + res.status);
-  const data = await res.json();
-  return data.name;
+function fbPush(path, value){
+  const ref = db.ref(path).push();
+  return ref.set(value).then(() => ref.key);
 }
 
 let tasks = [];
@@ -724,38 +717,28 @@ async function migrateLegacySettingsIfNeeded(){
   }catch(e){}
 }
 
-// -- polling keeps devices in sync every few seconds; every local action --
-// -- also updates the UI immediately (optimistic) rather than waiting    --
-async function refreshTasksFromServer(){
-  try{
-    const val = await fbGet('tasks');
-    const newTasks = tasksSnapshotToArray(val);
-    const changed = JSON.stringify(newTasks) !== JSON.stringify(tasks);
-    tasks = newTasks;
+// -- realtime listeners keep every device in sync instantly. Every local  --
+// -- action also updates the UI immediately (optimistic) rather than      --
+// -- waiting on the round trip.                                           --
+function attachRealtimeListeners(){
+  db.ref('tasks').on('value', snapshot => {
+    tasks = tasksSnapshotToArray(snapshot.val());
     storageOk = true;
-    if(changed && inlineEdit.id === null) renderAll();
-  }catch(e){
+    if(inlineEdit.id === null) renderAll();
+    renderFooter();
+  }, () => {
     storageOk = false;
-  }
-  renderFooter();
-}
+    renderFooter();
+  });
 
-async function refreshSettingsFromServer(){
-  try{
-    const val = await fbGet('settings');
+  db.ref('settings').on('value', snapshot => {
+    const val = snapshot.val();
     settings = val || { gridMode: '2x2', sortBy: 'logged' };
     if(!settings.sortBy) settings.sortBy = 'logged'; // older saved settings predate this field
     refreshModeButtons();
     refreshSortSelect();
     renderGrid();
-  }catch(e){ /* keep last known settings */ }
-}
-
-function startPolling(){
-  refreshTasksFromServer();
-  refreshSettingsFromServer();
-  setInterval(refreshTasksFromServer, 4000);
-  setInterval(refreshSettingsFromServer, 8000);
+  }, () => { /* keep last known settings */ });
 }
 
 function buildScaleButtons(container, onPick){
@@ -781,7 +764,7 @@ function renderFooter(){
   if(!storageOk){
     el.innerHTML = 'Could not reach the database — check your connection. <button id="resetBtn">Clear all data</button>';
   }else{
-    el.innerHTML = 'Synced via Firebase (updates every few seconds) · <button id="resetBtn">Clear all data</button>';
+    el.innerHTML = 'Synced via Firebase (instant updates) · <button id="resetBtn">Clear all data</button>';
   }
   document.getElementById('resetBtn').addEventListener('click', async () => {
     if(confirm('Delete all tasks on every device? This cannot be undone.')){
@@ -1114,9 +1097,8 @@ async function addTask(){
 
   let seqVal;
   try{
-    const current = await fbGet('meta/nextSeq');
-    seqVal = (current || 0) + 1;
-    await fbSet('meta/nextSeq', seqVal);
+    const result = await db.ref('meta/nextSeq').transaction(current => (current || 0) + 1);
+    seqVal = result.snapshot.val();
   }catch(e){
     seqVal = Date.now(); // fallback — shouldn't normally happen
   }
@@ -1160,7 +1142,7 @@ async function addTask(){
 async function init(){
   await migrateLegacyTasksIfNeeded();
   await migrateLegacySettingsIfNeeded();
-  startPolling();
+  attachRealtimeListeners();
   refreshModeButtons();
   refreshSortSelect();
 
