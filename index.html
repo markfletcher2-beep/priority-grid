@@ -195,8 +195,9 @@
   .cell6{ position:absolute; box-sizing:border-box; border: 1px solid rgba(0,0,0,0.05); }
 
   .quad, .cell6{ cursor: pointer; transition: opacity 0.15s ease, box-shadow 0.15s ease; }
-  .quad.cell-dim, .cell6.cell-dim{ opacity: 0.4; }
+  .quad.cell-dim, .cell6.cell-dim{ opacity: 0.25; }
   .quad.cell-active, .cell6.cell-active{ box-shadow: inset 0 0 0 2px var(--ink); opacity: 1; z-index: 2; }
+  .pill.pill-dim{ opacity: 0.3; }
 
   .cell-filter-banner{
     display:flex;
@@ -915,7 +916,8 @@ function renderGrid(){
 
     const pill = document.createElement('div');
     const status = dueStatus(t);
-    pill.className = 'pill' + (status === 'overdue' ? ' overdue' : status === 'soon' ? ' soon' : '');
+    const pillDim = cellFilter && !taskMatchesCellFilter(t);
+    pill.className = 'pill' + (status === 'overdue' ? ' overdue' : status === 'soon' ? ' soon' : '') + (pillDim ? ' pill-dim' : '');
     pill.style.left = left + '%';
     pill.style.top = top + '%';
     pill.style.transform = `translate(-50%, calc(-50% + ${stackOffset}px))`;
