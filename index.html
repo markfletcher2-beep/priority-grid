@@ -606,6 +606,7 @@
 
 <script src="https://www.gstatic.com/firebasejs/12.18.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/12.18.0/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/12.18.0/firebase-auth-compat.js"></script>
 <script>
 window.addEventListener('error', (e) => {
   const el = document.getElementById('footerNote');
@@ -627,6 +628,24 @@ const firebaseConfig = {
 };
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
+
+// Silent anonymous sign-in — no login screen, no username/password. This
+// exists purely so the database rules can require "must be signed in"
+// instead of being open to absolutely anyone (see Firebase console rules).
+// It resolves in well under a second in practice, so it adds no perceptible
+// friction to the low-friction goal of this app.
+let authReadyResolve;
+const authReady = new Promise(resolve => { authReadyResolve = resolve; });
+firebase.auth().onAuthStateChanged(user => {
+  if(user) authReadyResolve();
+});
+firebase.auth().signInAnonymously().catch(() => {
+  // If this fails (e.g. Anonymous sign-in isn't enabled yet in the Firebase
+  // console), let the app carry on loading rather than hang forever — the
+  // individual database calls will fail on their own and surface the usual
+  // "could not reach database" footer message.
+  authReadyResolve();
+});
 
 // Thin wrappers so the rest of the app's code (which was written against
 // these five function names) doesn't need to change at all.
@@ -1140,6 +1159,7 @@ async function addTask(){
 }
 
 async function init(){
+  await authReady;
   await migrateLegacyTasksIfNeeded();
   await migrateLegacySettingsIfNeeded();
   attachRealtimeListeners();
