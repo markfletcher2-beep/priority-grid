@@ -199,6 +199,39 @@
   .quad.cell-active, .cell6.cell-active{ box-shadow: inset 0 0 0 2px var(--ink); opacity: 1; z-index: 2; }
   .pill.pill-dim{ opacity: 0.3; }
 
+  .signin-screen{
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg, #f5f3ee);
+    padding: 20px;
+  }
+  .signin-card{
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 28px 24px;
+    text-align: center;
+    max-width: 340px;
+    width: 100%;
+  }
+  .signin-card h1{ margin: 0 0 8px; font-size: 22px; }
+  .signin-card p{ margin: 0 0 18px; color: var(--ink-soft); font-size: 14px; }
+  .signin-card button{
+    border: none;
+    background: var(--ink);
+    color: #fff;
+    padding: 11px 18px;
+    border-radius: 8px;
+    font-size: 15px;
+    font-family: inherit;
+    cursor: pointer;
+  }
+  .signin-msg{ margin-top: 12px; color: #b3261e; font-size: 13px; min-height: 16px; }
+
   .cell-filter-banner{
     display:flex;
     align-items:center;
@@ -487,6 +520,14 @@
 </style>
 </head>
 <body>
+<div id="signinScreen" class="signin-screen">
+  <div class="signin-card">
+    <h1>Priority Grid</h1>
+    <p>Sign in once on this device to open your tasks.</p>
+    <button type="button" id="signinBtn">Sign in with Google</button>
+    <div id="signinMsg" class="signin-msg"></div>
+  </div>
+</div>
 <div class="wrap">
 
   <header>
@@ -629,23 +670,47 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
-// Silent anonymous sign-in — no login screen, no username/password. This
-// exists purely so the database rules can require "must be signed in"
-// instead of being open to absolutely anyone (see Firebase console rules).
-// It resolves in well under a second in practice, so it adds no perceptible
-// friction to the low-friction goal of this app.
+// Google sign-in. The app only starts once someone is signed in, and the
+// database rules (set in the Firebase console) only let YOUR Google account's
+// user ID read or write. Firebase remembers the sign-in on each device, so
+// this is a one-time tap per device.
+let currentUser = null;
 let authReadyResolve;
 const authReady = new Promise(resolve => { authReadyResolve = resolve; });
+
 firebase.auth().onAuthStateChanged(user => {
-  if(user) authReadyResolve();
+  currentUser = user;
+  const screen = document.getElementById('signinScreen');
+  if(user){
+    if(screen) screen.style.display = 'none';
+    authReadyResolve();
+    if(typeof renderFooter === 'function' && document.getElementById('footerNote')) renderFooter();
+  }else{
+    if(screen) screen.style.display = 'flex';
+  }
 });
-firebase.auth().signInAnonymously().catch(() => {
-  // If this fails (e.g. Anonymous sign-in isn't enabled yet in the Firebase
-  // console), let the app carry on loading rather than hang forever — the
-  // individual database calls will fail on their own and surface the usual
-  // "could not reach database" footer message.
-  authReadyResolve();
+
+function signInWithGoogle(){
+  const msg = document.getElementById('signinMsg');
+  msg.textContent = '';
+  const provider = new firebase.auth.GoogleAuthProvider();
+  firebase.auth().signInWithPopup(provider).catch(err => {
+    if(err.code === 'auth/popup-blocked' || err.code === 'auth/operation-not-supported-in-this-environment'){
+      firebase.auth().signInWithRedirect(provider);
+    }else if(err.code !== 'auth/popup-closed-by-user' && err.code !== 'auth/cancelled-popup-request'){
+      msg.textContent = 'Sign-in failed (' + (err.code || 'unknown') + '). Try again.';
+    }
+  });
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const btn = document.getElementById('signinBtn');
+  if(btn) btn.addEventListener('click', signInWithGoogle);
 });
+
+function signOutOfApp(){
+  firebase.auth().signOut().then(() => location.reload());
+}
 
 // Thin wrappers so the rest of the app's code (which was written against
 // these five function names) doesn't need to change at all.
@@ -784,6 +849,12 @@ function renderFooter(){
     el.innerHTML = 'Could not reach the database — check your connection. <button id="resetBtn">Clear all data</button>';
   }else{
     el.innerHTML = 'Synced via Firebase (instant updates) · <button id="resetBtn">Clear all data</button>';
+  }
+  if(currentUser){
+    el.innerHTML += '<br>Signed in as ' + escapeHtml(currentUser.email || 'unknown') +
+      ' · <button id="signOutBtn">Sign out</button>' +
+      '<br><span style="font-size:11px;opacity:0.7;">Your UID: ' + escapeHtml(currentUser.uid) + '</span>';
+    document.getElementById('signOutBtn').addEventListener('click', signOutOfApp);
   }
   document.getElementById('resetBtn').addEventListener('click', async () => {
     if(confirm('Delete all tasks on every device? This cannot be undone.')){
